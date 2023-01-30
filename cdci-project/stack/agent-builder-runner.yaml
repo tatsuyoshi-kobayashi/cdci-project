@@ -1,0 +1,93 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: unity agent builder create. 1 image component, 1 image
+
+Parameters:
+# プロジェクト名
+  EnvironmentName:
+    Description: Name of the project
+    Type: String
+
+# このStackが配置されているS3のバケット名
+  S3BucketStack:
+    Description: Name of the S3Bucket where the resources for this CloudFormation stack are located
+    Type: String
+
+# Unityのイメージをビルドするコンポーネント(agent-builder.yaml)
+  BuildComponent:
+    Description: The component to build the Unity image
+    Type: String
+
+# Unityのイメージを出力するインフラストラクチャ設定(agent-builder.yaml)
+  InfrastructureConfiguration:
+    Description: infrastructure configure
+    Type: String
+
+# ターゲットのUnityのバージョン
+  UnityVersion:
+    Description: The version of Unity (20xx.x.xf-)
+    Type: String
+
+# ターゲットのUnityのバージョン(ホットフィックス)
+  HotfixVersion:
+    Description: The version of Unity (20--.-.-fx)
+    Type: String
+
+# dockerhub unityci/editorのイメージバージョン
+  UnityImageVersion:
+    Description: unityci/editor minor version
+    Type: String
+
+Resources:
+# ディストリビューション設定
+  DistributionConfiguration:
+    Type: AWS::ImageBuilder::DistributionConfiguration
+    Properties:
+      Name: !Sub '${EnvironmentName}-agent-builder-runner-distribution-configuration'
+      Distributions: 
+        - Region: !Ref AWS::Region
+          AmiDistributionConfiguration:
+            AmiTags:
+              Name: !Sub '${EnvironmentName}-${UnityVersion}f${HotfixVersion}-webgl'
+              UnityTarget: 'WebGL'
+              UnityVersion: !Sub '${UnityVersion}f${HotfixVersion}'
+              Builder: !Ref EnvironmentName
+
+# Dockerインストール+unity-agent docker image ビルドコンポーネント イメージレシピ
+  ImageRecipe:
+    Type: AWS::ImageBuilder::ImageRecipe
+    Properties:
+      Name: !Sub '${EnvironmentName}-agent-builder-runner-image-recipe'
+      Version: !Ref UnityVersion
+      ParentImage: !Sub 'arn:aws:imagebuilder:${AWS::Region}:aws:image/amazon-linux-2-x86/x.x.x'
+      AdditionalInstanceConfiguration:
+        SystemsManagerAgent:
+           UninstallAfterBuild: true 
+      Components:
+        - ComponentArn: !Sub 'arn:aws:imagebuilder:${AWS::Region}:aws:component/docker-ce-linux/1.0.0/1'
+        - ComponentArn: !Ref BuildComponent
+          Parameters:
+            - Name: BuildTarget
+              Value:
+                - webgl
+            - Name: UnityVersion
+              Value:
+                - !Sub '${UnityVersion}f${HotfixVersion}'
+            - Name: EditorImageMinorVersion
+              Value:
+                - !Ref UnityImageVersion
+      BlockDeviceMappings:
+        - DeviceName: "/dev/xvda"
+          Ebs:
+            DeleteOnTermination: true
+            VolumeType: "gp2"
+            VolumeSize: 16
+
+# 出力するUnityのイメージ
+  Image:
+    Type: AWS::ImageBuilder::Image
+    Properties:
+      ImageRecipeArn: !Ref ImageRecipe
+      InfrastructureConfigurationArn: !Ref InfrastructureConfiguration
+      DistributionConfigurationArn: !Ref DistributionConfiguration
+      ImageTestsConfiguration:
+        ImageTestsEnabled: false

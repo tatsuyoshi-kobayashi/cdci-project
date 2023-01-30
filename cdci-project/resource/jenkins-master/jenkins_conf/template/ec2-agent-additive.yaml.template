@@ -1,0 +1,10 @@
+          - <<: *ec2_template_anchor
+            description: "unity-webgl-${UNITY_VERSION}f${UNITY_HOTFIX_VERSION}"
+            labelString: "unity webgl ${UNITY_VERSION}f${UNITY_HOTFIX_VERSION}"
+            amiFilters:
+              - name: "tag:UnityVersion"
+                values: "${UNITY_VERSION}f${UNITY_HOTFIX_VERSION}"
+              - <<: *ami_filter_anchor
+            tags:
+            - name: "Name"
+              value: "unity-agent-${UNITY_VERSION}f${UNITY_HOTFIX_VERSION}"

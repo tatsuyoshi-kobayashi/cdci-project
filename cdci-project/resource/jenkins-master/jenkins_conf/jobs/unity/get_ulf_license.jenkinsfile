@@ -1,0 +1,68 @@
+String[] unityVersions = params.UNITY_VERSION.split('\\.')
+String unityFullVersion = "${unityVersions[0]}.${unityVersions[1]}.${unityVersions[2]}f${env.UNITY_HOTFIX_VERSION}"
+String ulfFile = "Unity_v${unityVersions[0]}.x.ulf"
+String alfFile = "Unity_v${unityFullVersion}.alf"
+String licensesDir = 'licenses'
+Boolean hasULFLicense
+Boolean hasALFLicense
+
+pipeline {
+  agent { label 'built-in'}
+
+  stages {
+    stage('Find license') {
+      steps {
+        script {
+          dir(licensesDir) {
+            hasULFLicense = fileExists(ulfFile)
+            hasALFLicense = fileExists(alfFile)
+          }
+        }
+      }
+    }
+    stage('Create alf license') {
+      when {
+        expression {
+          return !hasULFLicense && !hasALFLicense
+        }
+      }
+      steps {
+        script {
+          dir(licensesDir) {
+            build job: env.GET_UNITY_ALF_JOB,
+            parameters: [
+              string(name: 'UNITY_FULL_VERSION', value: unityFullVersion)
+            ]
+            copyArtifacts fingerprintArtifacts: true, projectName: env.GET_UNITY_ALF_JOB, selector: lastSuccessful()
+          }
+        }
+      }
+    }
+    stage('Wait input ulf') {
+      when {
+        expression {
+          return !hasULFLicense
+        }
+      }
+      steps {
+        script {
+          dir(licensesDir) {
+            String file
+            timeout(20) {
+              alfDownloadLink = "${env.BUILD_URL}execution/node/3/ws/${licensesDir}/${alfFile}"
+              file = input message: "alfファイルをアクティベーションしてulfファイルをドロップしてください[${alfDownloadLink}] [https://license.unity3d.com/manual]", parameters: [base64File(ulfFile)]
+            }
+            sh "echo ${file} | base64 -d > ${ulfFile}"
+          }
+        }
+      }
+    }
+  }
+  post {
+    success {
+      sh "cp ${licensesDir}/${ulfFile} ${ulfFile}"
+      archiveArtifacts artifacts: ulfFile, followSymlinks: false, onlyIfSuccessful: true
+      sh "rm ${ulfFile}"
+    }
+  }
+}

@@ -1,0 +1,83 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: main stack for cdci project
+
+Parameters:
+# プロジェクト名
+  EnvironmentName:
+    Description: Name of the project
+    Type: String
+    Default: sample-project
+
+# このStackが配置されているS3のバケット名
+  S3BucketStack:
+    Description: Name of the S3Bucket where the resources for this CloudFormation stack are located
+    Type: String
+    Default: cdci-project-bucket
+
+# アクセス許可を与えるIPアドレス (マイIP)
+  MyIP:
+    Description: Accessable ip address
+    Type: String
+    Default: 0.0.0.0
+
+# マスターノードのインスタンスタイプ
+  MasterInstanceType:
+    Description: Instance type of the master node
+    Type: String
+    Default: t3.micro
+
+# Jenkins 「admin」の初期パスワード
+  InitialPassword:
+    Description: jenkins [admin] user password
+    Type: String
+    Default: Passw0rd
+
+Resources:
+# cdci-core.yamlのスタックを作成
+  CDCICoreTemplate:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${S3BucketStack}.s3.${AWS::Region}.amazonaws.com/stack/cdci-core.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        S3BucketStack: !Ref S3BucketStack
+        MyIP: !Ref MyIP
+
+# agent-builder.yamlのスタックを作成
+  AgentBuilderTemplate:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${S3BucketStack}.s3.${AWS::Region}.amazonaws.com/stack/agent-builder.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        S3BucketStack: !Ref S3BucketStack
+
+# cdci-master.yamlのスタックを作成
+  CDCIMasterTemplate:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${S3BucketStack}.s3.${AWS::Region}.amazonaws.com/stack/cdci-master.yaml
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        S3BucketStack: !Ref S3BucketStack
+        InitialPassword: !Ref InitialPassword
+        PublicSubnetId: !GetAtt CDCICoreTemplate.Outputs.PublicSubnet
+        PrivateSubnetId: !GetAtt CDCICoreTemplate.Outputs.PrivateSubnet
+        MasterSecurityGroups: !Join
+          - ","
+          - - !GetAtt CDCICoreTemplate.Outputs.SelfSecurityGroup
+            - !GetAtt CDCICoreTemplate.Outputs.MyIPSecurityGroup
+        AgentSecurityGroups: !GetAtt CDCICoreTemplate.Outputs.SelfSecurityGroup
+        EC2InstanceType: !Ref MasterInstanceType
+        CloudFormationImageBuilderRoleArn: !GetAtt AgentBuilderTemplate.Outputs.CloudFormationImageBuilderRoleArn
+        BuildComponentArn: !GetAtt AgentBuilderTemplate.Outputs.BuildComponentArn
+        InfrastructureConfigurationArn: !GetAtt AgentBuilderTemplate.Outputs.InfrastructureConfigurationArn
+
+Outputs:
+  JenkinsPage:
+    Description: the cdci page URL. Provisioning takes 5 minutes after stack "success"
+    Value: !GetAtt CDCIMasterTemplate.Outputs.JenkinsPage
+  JenkinsUser:
+    Value: !GetAtt CDCIMasterTemplate.Outputs.JenkinsUser
+  JenkinsPassword:
+    Value: !GetAtt CDCIMasterTemplate.Outputs.JenkinsPassword

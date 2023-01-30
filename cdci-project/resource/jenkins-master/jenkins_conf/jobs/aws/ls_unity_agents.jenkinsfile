@@ -1,0 +1,28 @@
+pipeline {
+  agent { label 'aws' }
+
+  stages {
+    stage('Check AMI') {
+      steps {
+        script {
+          resultStr = sh returnStdout: true, script:"""
+          aws ec2 describe-images --owners ${AWS_ACCOUNT_ID} \
+          --filters 'Name=tag:UnityTarget,Values=WebGL' \
+          --query 'sort(Images[*].Tags[?Key==`UnityVersion`] | [][].Value)' --output text
+          """
+          result = resultStr.split('\t').join(',')
+          echo result
+          sh "echo '${result}' > ami_list.txt"
+        }
+      }
+    }
+  }
+  post {
+    success {
+      archiveArtifacts artifacts: 'ami_list.txt', onlyIfSuccessful: true
+    }
+    cleanup {
+      cleanWs()
+    }
+  }
+}
