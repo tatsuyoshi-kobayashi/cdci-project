@@ -18,7 +18,7 @@ pipeline {
                 script {
                   sshagent(['github']) {
                     dir ("tmpdir") {
-                      sh "git clone ${params.GITHUB_REPOSITORY}"
+                      sh "git clone ${params.GITHUB_REPOSITORY} ."
                       resultStr = sh returnStdout: true, script: "git branch -a"
                       assert resultStr.trim() == ""
                       deleteDir()
