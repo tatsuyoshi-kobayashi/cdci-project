@@ -1,0 +1,120 @@
+List unityIgnores = [
+  'Library/**',
+  'Temp/**',
+  'Obj/**',
+  'Build/**',
+  'Builds/**',
+  'Logs/**',
+  'UserSettings/**',
+  'MemoryCaptures/**',
+  'Recordings/**',
+  'Assets/Plugins/Editor/JetBrains*',
+  '.vs/**',
+  '.gradle/**',
+  'ExportedObj/**',
+  '.consulo/**',
+  '**/*.csproj',
+  '**/*.unityproj',
+  '**/*.sln',
+  '**/*.suo',
+  '**/*.tmp',
+  '**/*.user',
+  '**/*.userprefs',
+  '**/*.pidb',
+  '**/*.booproj',
+  '**/*.svd',
+  '**/*.pdb',
+  '**/*.mdb',
+  '**/*.opendb',
+  '**/*.VC.db',
+  '**/*.pidb.meta',
+  '**/*.pdb.meta',
+  '**/*.mdb.meta',
+  '**/sysinfo.txt',
+  '**/*.apk',
+  '**/*.aab',
+  '**/*.unitypackage',
+  '**/*.app',
+  '**/crashlytics-build.properties',
+  'Assets/AddressableAssetsData/**/*.bin*',
+  'Assets/StreamingAssets/aa.meta',
+  'Assets/StreamingAssets/aa/**',
+]
+excludes = unityIgnores
+  .collect { "${params.UNITY_PROJECT_NAME}/${it}" }
+  .inject { lhs, rhs -> "${lhs},${rhs}" }
+
+String[] unityVersions = params.UNITY_VERSION.split("\\.")
+String unityFullVersion = "${params.UNITY_VERSION}f${params.UNITY_HOTFIX_VERSION}"
+String ulfFile = "Unity_v${unityVersions[0]}.x.ulf"
+
+pipeline {
+  agent { label "unity && ${unityFullVersion}" }
+
+  stages {
+    stage('Get license') {
+      steps {
+        build job: env.GET_UNITY_ULF_JOB,
+        parameters: [
+          string(name: 'UNITY_VERSION', value: params.UNITY_VERSION),
+          string(name: 'UNITY_HOTFIX_VERSION', value: params.UNITY_HOTFIX_VERSION)
+        ]
+        copyArtifacts fingerprintArtifacts: true, projectName: env.GET_UNITY_ULF_JOB, selector: lastSuccessful()
+      }
+    }
+    stage('Activate license') {
+      steps {
+        script {
+          res = sh returnStatus: true, script: "/opt/unity/Editor/Unity -batchmode -nographics -quit -logfile -manualLicenseFile ${ulfFile}"
+          assert res == 1
+        }
+      }
+    }
+    stage('Create empty project') {
+      when {
+        expression { params.EMPTY_PROJECT }
+      }
+      steps {
+        script {
+          res = sh returnStatus: true, script: "/opt/unity/Editor/Unity -batchmode -nographics -quit -logfile -createProject ${UNITY_PROJECT_NAME}"
+          assert res == 0
+        }
+      }
+      post {
+        success {
+          archiveArtifacts artifacts: "${params.UNITY_PROJECT_NAME}/**", onlyIfSuccessful: true, defaultExcludes: false, excludes: excludes
+        }
+      }
+    }
+    stage('Create template project') {
+      when {
+        expression { !params.EMPTY_PROJECT }
+      }
+      steps {
+        script {
+          res = sh returnStatus: true, script: "/opt/unity/Editor/Unity -batchmode -nographics -quit -logfile -createProject ${UNITY_PROJECT_NAME}"
+          assert res == 0
+
+          build job: env.COPY_PROJECT_TEMPLATE_JOB
+          copyArtifacts fingerprintArtifacts: true, projectName: env.COPY_PROJECT_TEMPLATE_JOB, selector: lastSuccessful()
+          sh "cp -rT project-template/unity-project/ ${UNITY_PROJECT_NAME}/"
+
+          res = sh returnStatus: true, script: "/opt/unity/Editor/Unity -batchmode -nographics -quit -logfile -projectPath ${UNITY_PROJECT_NAME}"
+          assert res == 0
+        }
+      }
+      post {
+        success {
+          script {
+            archiveArtifacts artifacts: "${params.UNITY_PROJECT_NAME}/**", onlyIfSuccessful: true, defaultExcludes: false, excludes: excludes
+          }
+        }
+      }
+    }
+  }
+  post {
+    cleanup {
+      cleanWs()
+    }
+  }
+}

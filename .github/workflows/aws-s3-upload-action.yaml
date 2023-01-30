@@ -1,0 +1,23 @@
+name: cdci-project Resouce S3 Deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_USER_ACCESSKEY }}
+          aws-secret-access-key: ${{ secrets.AWS_USER_SECRET_ACCESSKEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Copy files to the s3 bucket
+        run: |
+          aws s3 sync ./cdci-project s3://${{ secrets.AWS_BUCKET_NAME }}

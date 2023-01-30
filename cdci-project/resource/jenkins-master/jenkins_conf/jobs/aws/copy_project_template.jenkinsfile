@@ -1,0 +1,21 @@
+pipeline {
+  agent { label 'aws' }
+
+  stages {
+    stage('Copy project template') {
+      steps {
+        script {
+					sh "aws s3 cp --recursive s3://${S3BUCKET_STACK}/resource/project-template/ project-template"
+        }
+      }
+    }
+  }
+  post {
+    success {
+      archiveArtifacts artifacts: 'project-template/**', onlyIfSuccessful: true, defaultExcludes: false
+    }
+    cleanup {
+      cleanWs()
+    }
+  }
+}

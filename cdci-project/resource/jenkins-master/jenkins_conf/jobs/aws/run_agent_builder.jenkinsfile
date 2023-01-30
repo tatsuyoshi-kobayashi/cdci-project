@@ -1,0 +1,50 @@
+String stackId
+
+pipeline {
+  agent { label 'aws' }
+
+  stages {
+    stage('Build agent image') {
+      steps {
+        script {
+          def unityVersionLabel = params.UNITY_VERSION.replace('.','-');
+          stackId = sh returnStdout: true, script:"""
+          aws cloudformation create-stack --stack-name "${env.STACK_ENVIRONMENT_NAME}-agent-builder-runner-${unityVersionLabel}" \
+          --template-url "https://${env.S3BUCKET_STACK}.s3.${env.REGION}.amazonaws.com/stack/agent-builder-runner.yaml" \
+          --role-arn "${env.IMAGE_BUILDER_ROLE}" \
+          --parameters \
+          ParameterKey=EnvironmentName,ParameterValue="${env.STACK_ENVIRONMENT_NAME}" \
+          ParameterKey=S3BucketStack,ParameterValue="${env.S3BUCKET_STACK}" \
+          ParameterKey=BuildComponent,ParameterValue="${env.BUILD_COMPONENT}" \
+          ParameterKey=InfrastructureConfiguration,ParameterValue="${env.INFRASTRUCTURE_CONFIGURATION}" \
+          ParameterKey=UnityVersion,ParameterValue="${params.UNITY_VERSION}" \
+          ParameterKey=HotfixVersion,ParameterValue="${params.UNITY_HOTFIX_VERSION}" \
+          ParameterKey=UnityImageVersion,ParameterValue="${params.UNITY_IMAGE_VERSION}" \
+          --output yaml --query 'StackId'
+          """
+        }
+      }
+    }
+    stage('Wait image builder stack process') {
+      steps {
+        script {
+          sh "aws cloudformation wait stack-create-complete --stack-name ${stackId}"
+        }
+      }
+    }
+    stage('Delete image builder stack') {
+      steps {
+        script {
+          sh "aws cloudformation delete-stack --stack-name ${stackId}"
+        }
+      }
+    }
+    stage('Configure agent') {
+      steps {
+        script {
+          build job: env.CONFIGURE_UNITY_AGENT_JOB
+        }
+      }
+    }
+  }
+}

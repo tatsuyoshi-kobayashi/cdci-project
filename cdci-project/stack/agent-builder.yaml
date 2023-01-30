@@ -1,0 +1,207 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: unity agent builder create. 1 image component, 1 image 
+
+Parameters:
+# プロジェクト名
+  EnvironmentName:
+    Description: Name of the project
+    Type: String
+
+# このStackが配置されているS3のバケット名
+  S3BucketStack:
+    Description: Name of the S3Bucket where the resources for this CloudFormation stack are located
+    Type: String
+
+Resources:
+# ログ出力用 S3 [CFnスタックを削除してもこのリソースは残り続けます。]
+  S3BucketLog:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Sub '${EnvironmentName}-agent-builder-log'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: AutoDelete
+            Status: Enabled
+            ExpirationInDays: 14
+
+# ImageBuilder実行用IAMロール
+  EC2IAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub '${EnvironmentName}-agent-builder-role'
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - ec2.amazonaws.com
+            Action:
+            - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/EC2InstanceProfileForImageBuilder
+
+# ImageBuilder実行用IAMロールに、依存したS3のフルアクセスをアタッチ
+  EC2RolePolicies:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub '${EnvironmentName}-agent-builder-s3-access-policy'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+            - s3:List*
+            Resource:
+            - '*'
+          - Effect: Allow
+            Action:
+            - s3:*
+            Resource:
+              - !Sub 'arn:aws:s3:::${S3BucketStack}'
+              - !Sub 'arn:aws:s3:::${S3BucketStack}/*'
+              - !Sub 'arn:aws:s3:::${S3BucketLog}'
+              - !Sub 'arn:aws:s3:::${S3BucketLog}/*'
+      Roles:
+        - !Ref EC2IAMRole
+
+# ImageBuilder実行用IAMロールのプロファイル
+  EC2IAMProfile:
+    Type: AWS::IAM::InstanceProfile
+    DependsOn: EC2IAMRole
+    Properties:
+      Path: /
+      Roles:
+        - !Ref EC2IAMRole
+
+# ビルド用コンポーネント
+  BuildComponent:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: !Sub '${EnvironmentName}-agent-builder-unity-docker-component'
+      Platform: Linux
+      Version: 1.0.0
+      Data: 
+        Fn::Sub: |
+          name: unity-docker-image-builder
+          description: This is unity-docker-image-builder
+          schemaVersion: 1.0
+
+          parameters:
+            - BuildTarget:
+                type: string
+                default: "webgl"
+                description: unityci/editor build target
+
+            - UnityVersion:
+                type: string
+                default: "2021.3.15f1"
+                description: unity/editor version
+
+            - EditorImageMinorVersion:
+                type: string
+                default: "1.0"
+                description: unityci/editor minor version
+
+          phases:
+            - name: build
+              steps:
+                - name: EnableDocker
+                  action: ExecuteBash
+                  timeoutSeconds: 60
+                  onFailure: Abort
+                  inputs:
+                    commands:
+                      - sudo systemctl enable docker
+                      - sudo systemctl start docker
+
+                - name: DownloadDockerfile
+                  action: S3Download
+                  timeoutSeconds: 60
+                  onFailure: Abort
+                  maxAttempts: 3
+                  inputs:
+                    - source: 's3://${S3BucketStack}/resource/agent-builder/Dockerfile'
+                      destination: './Dockerfile'
+
+                - name: BuildDockerImage
+                  action: ExecuteBash
+                  timeoutSeconds: 3600
+                  onFailure: Abort
+                  inputs:
+                    commands:
+                      - sudo docker build ./ --build-arg UNITY_IMAGE_VERSION={{UnityVersion}}-{{BuildTarget}}-{{EditorImageMinorVersion}} --build-arg HOST_UID=$(id -u ec2-user) --build-arg HOST_GID=$(id -g ec2-user) -t unity-agent
+
+                - name: AddDockerRestartPolicy
+                  action: ExecuteBash
+                  timeoutSeconds: 60
+                  onFailure: Abort
+                  inputs:
+                    commands:
+                      - sudo docker run -d -p 8022:22 -v /home/ec2-user/.ssh:/home/jenkins-agent/.ssh --restart always --name unity-agent-container unity-agent
+                      - sudo sleep 15
+                      - sudo docker stop unity-agent-container
+
+                - name: CleanupDockerCache
+                  action: ExecuteBash
+                  timeoutSeconds: 60
+                  onFailure: Abort
+                  inputs:
+                    commands:
+                      - sudo docker image rm unityci/editor:{{UnityVersion}}-{{BuildTarget}}-{{EditorImageMinorVersion}}
+                      - sudo docker builder prune -af
+
+                - name: CleanupDockerFile
+                  action: DeleteFile
+                  onFailure: Abort
+                  inputs:
+                    - path: '{{build.DownloadDockerfile.inputs[0].destination}}'
+
+# インフラストラクチャ設定
+  InfrastructureConfiguration:
+    Type: AWS::ImageBuilder::InfrastructureConfiguration
+    Properties:
+      Name: !Sub '${EnvironmentName}-agent-builder-infrastructure-configuration'
+      InstanceProfileName: !Ref EC2IAMProfile
+      InstanceTypes:
+        - t2.micro
+      SecurityGroupIds: []
+      TerminateInstanceOnFailure: true
+      Logging:
+        S3Logs:
+          S3BucketName: !Ref S3BucketLog
+
+# CloudFormation用ImageBuilder実行Role
+  CloudFormationImageBuilderRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub '${EnvironmentName}-cfn-image-build-role'
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - cloudformation.amazonaws.com
+            Action:
+            - sts:AssumeRole
+      ManagedPolicyArns:
+        # Todo: AWS公式のFullAccessは権限が広めなのでリソースを狭めたい
+        - arn:aws:iam::aws:policy/AWSImageBuilderFullAccess
+
+Outputs:
+  CloudFormationImageBuilderRoleArn:
+    Value: !GetAtt CloudFormationImageBuilderRole.Arn
+  BuildComponentArn:
+    Value: !Ref BuildComponent
+  InfrastructureConfigurationArn:
+    Value: !Ref InfrastructureConfiguration

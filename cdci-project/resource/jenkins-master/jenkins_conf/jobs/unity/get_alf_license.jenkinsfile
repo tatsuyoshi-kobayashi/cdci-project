@@ -1,0 +1,27 @@
+String alfFile = "Unity_v${params.UNITY_FULL_VERSION}.alf"
+
+pipeline {
+  agent { label "unity && ${params.UNITY_FULL_VERSION}"}
+
+  stages {
+    stage('Create alf license') {
+      steps {
+        script {
+          dir ('alf_license') {
+            res = sh returnStatus: true, script: '/opt/unity/Editor/Unity -batchmode -nographics -quit -logfile -createManualActivationFile'
+            assert res == 1
+            sh "mv ${alfFile} ../"
+          }
+        }
+      }
+    }
+  }
+  post {
+    success {
+      archiveArtifacts artifacts: alfFile, followSymlinks: false, onlyIfSuccessful: true
+    }
+    cleanup {
+      cleanWs()
+    }
+  }
+}

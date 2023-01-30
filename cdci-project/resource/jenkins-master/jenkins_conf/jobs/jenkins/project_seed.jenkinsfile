@@ -1,0 +1,18 @@
+pipeline {
+  agent { label 'built-in' }
+  stages {
+    stage('Execute jobdsl') {
+      steps {
+        script {
+          sh "envsubst '\${UNITY_VERSION} \${UNITY_HOTFIX_VERSION} \${PROJECT_NAME} \${UNITY_PROJECT_NAME} \${S3BUCKET_DEPLOY} \${GITHUB_REPOSITORY}' < ${env.PROJECT_JOB_DSL_TEMPLATE} > dsl"
+          jobDsl sandbox: true, targets: 'dsl'
+        }
+      }
+    }
+  }
+  post {
+    cleanup {
+      cleanWs()
+    }
+  }
+}

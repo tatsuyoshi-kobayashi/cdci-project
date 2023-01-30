@@ -1,0 +1,325 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: jenkins instance and deployS3
+
+Parameters:
+# プロジェクト名
+  EnvironmentName:
+    Description: Name of the project
+    Type: String
+
+# このStackが配置されているS3のバケット名
+  S3BucketStack:
+    Description: Name of the S3Bucket where the resources for this CloudFormation stack are located
+    Type: String
+
+# Jenkins 「admin」の初期パスワード
+  InitialPassword:
+    Description: jenkins [admin] user password
+    Type: String
+
+# CDCIマスターインスタンスが属するパブリックサブネット
+  PublicSubnetId:
+    Description: public subnet to which the instance belongs
+    Type: AWS::EC2::Subnet::Id
+
+# CDCIエージェントインスタンスが属するプライベートサブネット
+  PrivateSubnetId:
+    Description: public subnet to which the instance belongs
+    Type: AWS::EC2::Subnet::Id
+
+# CDCIマスターインスタンスに設定するセキュリティグループ
+  MasterSecurityGroups:
+    Description: Security group to set for the instance
+    Type: List<AWS::EC2::SecurityGroup::Id>
+
+# CDCIエージェントインスタンスに設定するセキュリティグループ
+  AgentSecurityGroups:
+    Description: Security group to set for the instance
+    Type: List<AWS::EC2::SecurityGroup::Id>
+
+# インスタンスタイプ
+  EC2InstanceType:
+    Type: String
+    Default: t3.micro
+
+# インスタンスAMI
+  EC2ImageId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
+
+# ImageBuilderのCloudFormationを実行するためのIAMRole
+  CloudFormationImageBuilderRoleArn:
+    Description: IAMRole for running ImageBuilder CloudFormation
+    Type: String
+
+# Unityのイメージをビルドするコンポーネント(agent-builder.yaml)
+  BuildComponentArn:
+    Description: The component to build the Unity image
+    Type: String
+
+# Unityのイメージを出力するインフラストラクチャ設定(agent-builder.yaml)
+  InfrastructureConfigurationArn:
+    Description: infrastructure configure
+    Type: String
+
+Resources:
+  # デプロイ先 S3 [CFnスタックを削除してもこのリソースは残り続けます。]
+  S3BucketDeploy:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Sub '${EnvironmentName}-cdci-master-deploy-bucket'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # エージェント用SSHキー
+  AgentKeyPair:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: !Sub '${EnvironmentName}-agent-keypair'
+      KeyType: rsa
+
+  # jenkinsマスターノードのインスタンス実行ロール
+  EC2IAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub '${EnvironmentName}-cdci-master-role'
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+
+  # デプロイ先S3のフルアクセスポリシー
+  S3UpdatePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub '${EnvironmentName}-cdci-master-deploy-s3-update-policy'
+      Roles:
+        - !Ref EC2IAMRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "s3:*"
+            Resource:
+              - !Sub 'arn:aws:s3:::${S3BucketDeploy}'
+              - !Sub 'arn:aws:s3:::${S3BucketDeploy}/*'
+
+  # 必要リソースをこの構成S3からダウンロードするポリシー
+  S3GetPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub '${EnvironmentName}-cdci-master-s3-get-policy'
+      Roles:
+        - !Ref EC2IAMRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 's3:GetObject'
+              - 's3:GetBucketLocation'
+              - 's3:ListBucket'
+            Resource:
+              - !Sub 'arn:aws:s3:::${S3BucketStack}'
+              - !Sub 'arn:aws:s3:::${S3BucketStack}/*'
+
+  # SSMパラメータストアからSecretStringを取得するポリシー
+  GetSSMKeyPairPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${EnvironmentName}-cdci-master-ssm-keypair-policy
+      Roles:
+        - !Ref EC2IAMRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "ssm:GetParameter"
+            Resource:
+              - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ec2/keypair/${AgentKeyPair.KeyPairId}"
+
+  # jenkinsのec2プラグインがcloud agentを立てるために必要なポリシー
+  EC2AccessPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub '${EnvironmentName}-cdci-master-ec2-full-policy'
+      Roles:
+        - !Ref EC2IAMRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:DescribeSpotInstanceRequests
+              - ec2:CancelSpotInstanceRequests
+              - ec2:GetConsoleOutput
+              - ec2:RequestSpotInstances
+              - ec2:RunInstances
+              - ec2:StartInstances
+              - ec2:StopInstances
+              - ec2:TerminateInstances
+              - ec2:CreateTags
+              - ec2:DeleteTags
+              - ec2:DescribeInstances
+              - ec2:DescribeInstanceTypes
+              - ec2:DescribeKeyPairs
+              - ec2:DescribeRegions
+              - ec2:DescribeImages
+              - ec2:DescribeAvailabilityZones
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeSubnets
+              - iam:ListInstanceProfilesForRole
+              - iam:PassRole
+              - iam:CreateServiceLinkedRole
+              - ec2:GetPasswordData
+              - ec2:CreateSpotDatafeedSubscription
+              - ec2:DeleteSpotDatafeedSubscription
+              - ec2:DescribeSpotDatafeedSubscription
+              - ec2:DescribeSpotPriceHistory
+            Resource:
+              - "*"
+
+  # jenkinsのmasterインスタンスがCloudFormationを実行するポリシー
+  CloudFormationAccessPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${EnvironmentName}-cdci-master-cloudformation-access-policy
+      Roles:
+        - !Ref EC2IAMRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - cloudformation:CreateStack
+              - cloudformation:DeleteStack
+              - cloudformation:UpdateStack
+              - cloudformation:DescribeStacks
+              - cloudformation:DescribeStackEvents
+              - cloudformation:DescribeStackResources
+            Resource:
+              - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${EnvironmentName}-agent-builder-runner-*/*"
+          - Effect: Allow
+            Action:
+              - iam:PassRole
+            Resource:
+              - !Ref CloudFormationImageBuilderRoleArn
+
+  # ロールアタッチ用インスタンスプロファイル
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub '${EnvironmentName}-cdci-master-profile'
+      Path: /
+      Roles:
+        - !Ref EC2IAMRole
+
+  # CDCIインスタンス用ElasticIP
+  EIP:
+    Type: "AWS::EC2::EIP"
+    Properties:
+      Domain: vpc
+
+  # CDCIインスタンス
+  EC2:
+    Type: AWS::EC2::Instance
+    Properties: 
+      ImageId: !Ref EC2ImageId
+      InstanceType: !Ref EC2InstanceType
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SubnetId: !Ref PublicSubnetId
+      SecurityGroupIds: !Ref MasterSecurityGroups
+      Tags:
+        - Key: Name
+          Value: !Sub "${EnvironmentName}-cdci-master-instance"
+      BlockDeviceMappings:
+        - DeviceName: "/dev/xvda"
+          Ebs:
+            VolumeSize: 16
+      UserData: 
+        Fn::Base64: !Sub
+          - |
+            #!/bin/bash
+            yum update -y
+            yum install -y docker
+
+            systemctl start docker
+            systemctl enable docker
+            usermod -aG docker ec2-user
+            
+            aws ssm get-parameter --region ${region} --name ${agentKeyPairParam} --with-decryption --query Parameter.Value --output text > /home/ec2-user/.ssh/${agentKeyPairName}.pem
+            aws s3 cp --recursive s3://${s3BucketStack}/resource/jenkins-master /home/ec2-user/jenkins-master
+            ssh-keygen -t ed25519 -f /home/ec2-user/.ssh/jenkins-github -C '' -N ''
+            echo -n ${initialPassword} > /home/ec2-user/admin_initial_password
+            touch /home/ec2-user/jenkins-master/.env
+            chown -R ec2-user:ec2-user /home/ec2-user/
+
+            echo REGION=${region} >> /home/ec2-user/jenkins-master/.env
+            echo JENKINS_URL=${ec2Origin} >> /home/ec2-user/jenkins-master/.env
+            echo S3BUCKET_STACK=${s3BucketStack} >> /home/ec2-user/jenkins-master/.env
+            echo S3BUCKET_DEPLOY=${s3BucketDeploy} >> /home/ec2-user/jenkins-master/.env
+            echo STACK_ENVIRONMENT_NAME=${stackEnvironmentName} >> /home/ec2-user/jenkins-master/.env
+            echo AGENT_KEYPAIR=${agentKeyPairName} >> /home/ec2-user/jenkins-master/.env
+            echo AWS_ACCOUNT_ID=${accountId} >> /home/ec2-user/jenkins-master/.env
+            echo SG_ID=${securityGroupId} >> /home/ec2-user/jenkins-master/.env
+            echo SUBNET_ID=${subnetId} >> /home/ec2-user/jenkins-master/.env
+            echo BUILD_COMPONENT=${buildComponent} >> /home/ec2-user/jenkins-master/.env
+            echo INFRASTRUCTURE_CONFIGURATION=${infrastructureConfiguration} >> /home/ec2-user/jenkins-master/.env
+            echo IMAGE_BUILDER_ROLE=${imageBuilderRole} >> /home/ec2-user/jenkins-master/.env
+            echo CASC_RELOAD_TOKEN=$(head -n 10 /dev/random  | tr -dc a-z0-9 | fold -w 10 | head -1) >> /home/ec2-user/jenkins-master/.env
+
+            docker build --build-arg HOST_UID=$(id -u ec2-user) --build-arg HOST_GID=$(id -g ec2-user) /home/ec2-user/jenkins-master -t jenkins
+            docker volume create jenkins_home
+            docker run -p 80:8080 --restart always --name jenkins-master --env-file /home/ec2-user/jenkins-master/.env \
+            --mount type=volume,source=jenkins_home,target=/var/jenkins_home \
+            --mount type=bind,source=/home/ec2-user/jenkins-master/jenkins_conf,target=/var/jenkins_conf \
+            --mount type=bind,source=/home/ec2-user/admin_initial_password,target=/secret/admin_initial_password \
+            --mount type=bind,source=/home/ec2-user/.ssh/${agentKeyPairName}.pem,target=/home/jenkins/.ssh/agent-rsa.pem \
+            --mount type=bind,source=/home/ec2-user/.ssh/jenkins-github,target=/home/jenkins/.ssh/github.pem jenkins
+          - region: !Ref AWS::Region
+            stackEnvironmentName: !Ref EnvironmentName
+            initialPassword: !Ref InitialPassword
+            agentKeyPairName: !Ref AgentKeyPair
+            agentKeyPairParam: !Sub '/ec2/keypair/${AgentKeyPair.KeyPairId}'
+            s3BucketStack: !Ref S3BucketStack
+            s3BucketDeploy: !Ref S3BucketDeploy
+            accountId: !Ref AWS::AccountId
+            buildComponent: !Ref BuildComponentArn
+            infrastructureConfiguration: !Ref InfrastructureConfigurationArn
+            imageBuilderRole: !Ref CloudFormationImageBuilderRoleArn
+            securityGroupId: !Join
+              - ','
+              - !Ref AgentSecurityGroups
+            subnetId: !Ref PrivateSubnetId
+            ec2Origin: !Sub 
+              - 'http://ec2-${ipBlock}.${region}.compute.amazonaws.com'
+              - ipBlock: !Join ["-", !Split [".", !GetAtt EIP.PublicIp]]
+                region: !Ref AWS::Region
+
+  # CDCIインスタンスにEIPをアタッチ
+  IPAssoc:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      InstanceId: !Ref EC2
+      EIP: !Ref EIP
+
+Outputs:
+  JenkinsPage:
+    Description: the cdci page URL. Provisioning takes 5 minutes after stack "success"
+    Value: !GetAtt EC2.PublicDnsName
+  JenkinsUser:
+    Value: admin
+  JenkinsPassword:
+    Value: !Ref InitialPassword
