@@ -19,7 +19,7 @@ pipelineJob("/projects/${PROJECT_NAME}/build_${UNITY_PROJECT_NAME}") {
           branches('develop')
         }
       }
-      scriptPath('jenkins/Jenkinsfile')
+      scriptPath("${SCM_SCRIPT_PATH}")
       lightweight()
     } 
   }

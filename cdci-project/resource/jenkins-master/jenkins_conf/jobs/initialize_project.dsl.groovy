@@ -18,6 +18,7 @@ pipelineJob('/initialize_project') {
     COPY_PROJECT_TEMPLATE_JOB: '/aws/copy_project_template',
     CREATE_UNITY_PROJECT_JOB: '/unity/create_unity_project',
     GIT_USER_NAME: 'jenkins',
+    SCM_SCRIPT_PATH: 'jenkins/Jenkinsfile'
     GIT_USER_EMAIL: JENKINS_URL
   )
   definition {

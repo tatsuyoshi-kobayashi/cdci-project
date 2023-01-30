@@ -101,6 +101,7 @@ pipeline {
                 string(name: 'UNITY_PROJECT_NAME', value: params.UNITY_PROJECT_NAME),
                 string(name: 'UNITY_VERSION', value: params.UNITY_VERSION),
                 string(name: 'UNITY_HOTFIX_VERSION', value: params.UNITY_HOTFIX_VERSION),
+                string(name: 'SCM_SCRIPT_PATH', value: env.SCM_SCRIPT_PATH)
               ]
             }
           }
