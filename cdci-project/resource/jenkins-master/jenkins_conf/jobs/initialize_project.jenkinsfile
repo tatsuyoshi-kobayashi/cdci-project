@@ -5,9 +5,27 @@ pipeline {
       parallel {
         stage('Check github') {
           agent { label 'built-in' }
-          steps {
-            script {
-              build job: env.GITHUB_CERTIFICATION_CHECK_JOB
+          stages {
+            stage('Check authorization') {
+              steps {
+                script {
+                  build job: env.GITHUB_CERTIFICATION_CHECK_JOB
+                }
+              }
+            }
+            stage('Check repository is empty') {
+              steps {
+                script {
+                  sshagent(['github']) {
+                    dir ("tmpdir") {
+                      sh "git clone ${params.GITHUB_REPOSITORY}"
+                      resultStr = sh returnStdout: true, script: "git branch -a"
+                      assert resultStr.trim() == ""
+                      deleteDir()
+                    }
+                  }
+                }
+              }
             }
           }
         }
