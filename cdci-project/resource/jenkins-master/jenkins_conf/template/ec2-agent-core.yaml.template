@@ -1,0 +1,31 @@
+x-ami-filters: &ami_filter_anchor
+  name: "tag:UnityTarget"
+  values: "WebGL"
+
+x-ec2-template: &ec2_template_anchor
+  amiFilters:
+    - <<: *ami_filter_anchor
+  amiOwners: "${AWS_ACCOUNT_ID}"
+  amiType:
+    unixData:
+      sshPort: "8022"
+  hostKeyVerificationStrategy: ACCEPT_NEW
+  idleTerminationMinutes: "3"
+  numExecutors: 1
+  remoteAdmin: "jenkins-agent"
+  remoteFS: "/home/jenkins-agent"
+  securityGroups: "${SG_ID}"
+  spotConfig:
+    spotMaxBidPrice: "0.08"
+    useBidPrice: true
+  subnetId: "${SUBNET_ID}"
+  type: T3Medium
+
+jenkins:
+  clouds:
+    - amazonEC2:
+        cloudName: "ec2-agent"
+        region: "${REGION}"
+        sshKeysCredentialsId: "${AGENT_KEYPAIR}"
+        useInstanceProfileForCredentials: true
+        templates:

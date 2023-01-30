@@ -1,0 +1,97 @@
+String unityFullVersion = "${params.UNITY_VERSION}f${params.UNITY_HOTFIX_VERSION}"
+Boolean hasAgent
+Boolean hasImage
+String unityImageVersion
+
+String inputMessage = '''取得可能なUnityのイメージ自体のバージョンを指定してください。
+https://hub.docker.com/r/unityci/editor/tags?page=1&name=webgl'''
+
+pipeline {
+  agent { label 'built-in' }
+  stages {
+		stage('Check unity agent') {
+      steps {
+        script {
+          try {
+            timeout(env.AGENT_BOOT_TIMEOUT) {
+              node("unity && ${unityFullVersion}") {
+                echo "Unity${unityFullVersion} agent has setup"
+                hasAgent = true
+              }
+            }
+          }catch ( err ) {
+            hasAgent = false
+          }
+        }
+      }
+    }
+    stage('Check unity ami') {
+      when {
+        expression {
+          !hasAgent
+        }
+      }
+      steps {
+        script {
+          dir('.check-ami-tmp') {
+            build job: env.LS_UNITY_AGENT_JOB
+            copyArtifacts fingerprintArtifacts: true, projectName: env.LS_UNITY_AGENT_JOB, selector: lastSuccessful()
+            amiListStr = readFile 'ami_list.txt'
+            amiList = amiListStr.split(',')
+            hasImage = Arrays.asList(amiList).contains(unityFullVersion)
+		
+            deleteDir()
+          }
+        }
+      }
+    }
+    stage('Configure agent') {
+      when {
+        expression {
+          !hasAgent && hasImage
+        }
+      }
+      steps {
+        script {
+          build job: env.CONFIGURE_UNITY_AGENT_JOB
+        }
+      }
+    }
+    stage('Setup agent image') {
+      when {
+        expression {
+          !hasAgent && !hasImage
+        }
+      }
+      stages {
+        stage('Wait input image version') {
+          steps {
+            script {
+              unityImageVersion = input(
+                message: inputMessage,
+                parameters: [
+                  string(
+                    defaultValue: '1.0.1',
+                    description: "イメージのバージョン: ${params.UNITY_VERSION}f${params.UNITY_HOTFIX_VERSION}-webgl-[x.x.x]",
+                    name: 'unityImageVersion'),
+                ]
+              )
+            }
+          }
+        }
+        stage('Run agent builder') {
+          steps {
+            script {
+              build job: env.RUN_AGENT_BUILDER_JOB,
+              parameters: [
+                string(name: 'UNITY_VERSION', value: params.UNITY_VERSION),
+                string(name: 'UNITY_HOTFIX_VERSION', value: params.UNITY_HOTFIX_VERSION),
+                string(name: 'UNITY_IMAGE_VERSION', value: unityImageVersion)
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

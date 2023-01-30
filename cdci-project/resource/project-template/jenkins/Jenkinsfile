@@ -1,0 +1,125 @@
+String[] unityVersions = env.UNITY_VERSION.split("\\.")
+String unityFullVersion = "${env.UNITY_VERSION}f${env.UNITY_HOTFIX_VERSION}"
+String ulfFile = "Unity_v${unityVersions[0]}.x.ulf"
+
+pipeline {
+  agent none
+  options {
+    skipDefaultCheckout(true)
+  }
+  stages {
+    stage("checkout scm") {
+      agent {label "github"}
+      steps {
+        dir ("repo") {
+          dir (env.PROJECT_NAME) {
+            checkout scm
+          }
+        }
+      }
+      post {
+        success {
+          dir ("repo") {
+            stash name: "repo", includes: "${env.PROJECT_NAME}/**"
+          }
+        }
+      }
+    }
+    stage("build") {
+      agent {label "unity && ${unityFullVersion} && webgl"}
+      stages {
+        stage("copy repository") {
+          steps {
+            unstash 'repo'
+          }
+        }
+        stage('get license') {
+          steps {
+            build job: env.GET_UNITY_ULF_JOB,
+            parameters: [
+              string(name: "UNITY_VERSION", value: env.UNITY_VERSION),
+              string(name: "UNITY_HOTFIX_VERSION", value: env.UNITY_HOTFIX_VERSION)
+            ]
+            copyArtifacts fingerprintArtifacts: true, projectName: env.GET_UNITY_ULF_JOB, selector: lastSuccessful()
+          }
+        }
+        stage('activate license') {
+          steps {
+            script {
+              res = sh returnStatus: true, script: "/opt/unity/Editor/Unity -batchmode -nographics -quit -logfile -manualLicenseFile ${ulfFile}"
+              assert res == 1
+            }
+          }
+        }
+        stage('execute build method') {
+          steps {
+            script {
+              res = sh returnStatus: true, script: "/opt/unity/Editor/Unity -batchmode -nographics -quit -logfile -projectPath ${env.PROJECT_NAME}/${env.UNITY_PROJECT_NAME} -buildTarget WebGL -executeMethod Builder.WebGLBuild -outputPath ${env.WORKSPACE}/output/${env.UNITY_PROJECT_NAME}"
+              assert res == 0
+            }
+          }
+        }
+      }
+      post {
+        success {
+          dir('output') {
+            stash name: "artifact", includes: "${env.UNITY_PROJECT_NAME}/**"
+            archiveArtifacts artifacts: "${env.UNITY_PROJECT_NAME}/**", onlyIfSuccessful: true
+          }
+        }
+        cleanup {
+          cleanWs()
+        }
+      }
+    }
+    stage("deploy") {
+      agent {label "aws"}
+      stages {
+        stage("copy artifact") {
+          steps {
+            dir("artifact") {
+              unstash "artifact"
+            }
+          }
+        }
+        stage("aws s3 deploy") {
+          steps {
+            script {
+              dir("artifact") {
+                findedBuildedFile = sh returnStdout: true, script: "find ${env.UNITY_PROJECT_NAME}/Build/ -type f"
+                buildedFiles = findedBuildedFile.split('\n')
+                
+                sh "aws s3 cp --recursive --exclude \"Build/*\" ${env.UNITY_PROJECT_NAME} s3://${env.S3BUCKET_DEPLOY}/${env.UNITY_PROJECT_NAME}"
+                for (buildedFile in buildedFiles) {
+                  substredBuildedFile = buildedFile
+                  commandContentEncoding = ''
+                  commandContentType = ''
+                  if (buildedFile.endsWith(".br")) {
+                    substredBuildedFile = buildedFile.substring(0, buildedFile.length() - ".br".length())
+                    commandContentEncoding = '--content-encoding br'
+                  } else if (buildedFile.endsWith(".gz")) {
+                    substredBuildedFile = buildedFile.substring(0, buildedFile.length() - ".gz".length())
+                    commandContentEncoding = '--content-encoding gzip'
+                  }
+                  if (substredBuildedFile.endsWith(".js")) {
+                    commandContentType = '--content-type application/javascript'
+                  } else if (substredBuildedFile.endsWith(".wasm")) {
+                    commandContentType = '--content-type application/wasm'
+                  } else {
+                    commandContentType = '--content-type binary/octet-stream'
+                  }
+                  sh "aws s3 cp ${buildedFile} s3://${env.S3BUCKET_DEPLOY}/${buildedFile} ${commandContentType} ${commandContentEncoding}"
+                }
+              }
+            }
+          }
+        }
+      }
+      post {
+        cleanup {
+          cleanWs()
+        }
+      }
+    }
+  }
+}

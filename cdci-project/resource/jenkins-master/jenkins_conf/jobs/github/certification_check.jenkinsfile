@@ -1,0 +1,43 @@
+Boolean hasCertificated
+
+pipeline {
+  agent { label 'github' }
+
+  stages {
+    stage('Test github ssh session') {
+      steps {
+        script {
+          sshagent(['github']) {
+            def ret = sh returnStatus: true, script:'ssh -o StrictHostKeyChecking=no -T git@github.com'
+            // ログイン出来た場合 status: 1で終了する
+            hasCertificated = ret == 1
+          }
+        }
+      }
+    }
+    stage('Wait for authorization') {
+      when {
+        expression { !hasCertificated }
+      }
+      steps {
+        script {
+          def publicKey = sh returnStdout: true, script:'ssh-keygen -y -f /home/jenkins/.ssh/github.pem'
+          input message: publicKey, ok: 'githubのSSHキーに加えてからOK'
+        }
+      }
+    }
+    stage('Retry test github ssh session') {
+      when {
+        expression { !hasCertificated }
+      }
+      steps {
+        script {
+          sshagent(['github']) {
+            def ret = sh returnStatus: true, script:'ssh -o StrictHostKeyChecking=no -T git@github.com'
+            assert ret == 1
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,51 @@
+# JobDSLによって構築時にjobを追加する
+jobs:
+  # 初期起動jobDSLに環境変数をパスする
+  - providedEnv:
+      AWS_ACCOUNT_ID: "${AWS_ACCOUNT_ID}"
+      STACK_ENVIRONMENT_NAME: "${STACK_ENVIRONMENT_NAME}"
+      S3BUCKET_STACK: "${S3BUCKET_STACK}"
+      S3BUCKET_DEPLOY: "${S3BUCKET_DEPLOY}"
+      REGION: "${REGION}"
+      IMAGE_BUILDER_ROLE: "${IMAGE_BUILDER_ROLE}"
+      BUILD_COMPONENT: "${BUILD_COMPONENT}"
+      INFRASTRUCTURE_CONFIGURATION: "${INFRASTRUCTURE_CONFIGURATION}"
+      CASC_RELOAD_TOKEN: "${CASC_RELOAD_TOKEN}"
+      AGENT_KEYPAIR: "${AGENT_KEYPAIR}"
+      SG_ID: "${SG_ID}"
+      SUBNET_ID: "${SUBNET_ID}"
+      JOBS_ROOT: "/var/jenkins_conf/jobs"
+  # フォルダの定義
+  - script: |
+      folder('aws') {
+        displayName('Lib AWS')
+        description('AWS関係のジョブ')
+      }
+      folder('github') {
+        displayName('Lib GitHub')
+        description('GitHub関係のジョブ')
+      }
+      folder('jenkins') {
+        displayName('Lib Jenkins')
+        description('Jenkins関係のジョブ')
+      }
+      folder('unity') {
+        displayName('Lib Unity')
+        description('Unity関係のジョブ')
+      }
+      folder('projects') {
+        displayName('Jobs ${STACK_ENVIRONMENT_NAME}')
+        description('${STACK_ENVIRONMENT_NAME}に属するジョブ')
+      }
+  # ジョブの追加
+  - file: /var/jenkins_conf/jobs/initialize_project.dsl.groovy
+  - file: /var/jenkins_conf/jobs/aws/copy_project_template.dsl.groovy
+  - file: /var/jenkins_conf/jobs/aws/ls_unity_agents.dsl.groovy
+  - file: /var/jenkins_conf/jobs/aws/run_agent_builder.dsl.groovy
+  - file: /var/jenkins_conf/jobs/jenkins/configure_unity_agent.dsl.groovy
+  - file: /var/jenkins_conf/jobs/jenkins/project_seed.dsl.groovy
+  - file: /var/jenkins_conf/jobs/jenkins/setup_unity_agent.dsl.groovy
+  - file: /var/jenkins_conf/jobs/github/certification_check.dsl.groovy
+  - file: /var/jenkins_conf/jobs/unity/get_ulf_license.dsl.groovy
+  - file: /var/jenkins_conf/jobs/unity/get_alf_license.dsl.groovy
+  - file: /var/jenkins_conf/jobs/unity/create_unity_project.dsl.groovy

@@ -1,0 +1,96 @@
+Boolean isInitial
+Boolean isNeedlyBuild
+
+pipeline {
+  agent { label 'built-in' }
+  stages {
+    stage('Check initial build') {
+      steps {
+        script {
+          isInitial = !fileExists('ami_list.prev.txt')
+          isNeedlyBuild = isInitial || params.FORCE_RELOAD
+        }
+      }
+    }
+    stage('Unity agent ls') {
+      steps {
+        script {
+          build job: env.LS_UNITY_AGENT_JOB
+          copyArtifacts fingerprintArtifacts: true, projectName: env.LS_UNITY_AGENT_JOB, selector: lastSuccessful()
+        }
+      }
+    }
+    stage('Check neadly reload') {
+      when {
+        expression {
+          !isNeedlyBuild
+        }
+      }
+      steps {
+        script {
+          def isDiff = sh returnStatus: true, script: 'diff ami_list.txt ami_list.prev.txt'
+          isNeedlyBuild = isDiff != 0
+        }
+      }
+    }
+    stage('Rewrite ec2-agent.yaml') {
+      when {
+        expression {
+          isNeedlyBuild
+        }
+      }
+      steps {
+        script {
+          sh "echo \"# This document was written by [${env.JOB_BASE_NAME}:${env.BUILD_NUMBER}].\" > ${env.CASC_DEST}"
+          sh "envsubst '\${AWS_ACCOUNT_ID} \${SG_ID} \${SUBNET_ID} \${REGION} \${AGENT_KEYPAIR}' < ${env.CASC_TEMPLATE_CORE_SRC} >> ${env.CASC_DEST}"
+        }
+      }
+    }
+    stage('Write agent info to ec2-agent.yaml') {
+      when {
+        expression {
+          isNeedlyBuild
+        }
+      }
+      steps {
+        script {
+          amiListStr = readFile 'ami_list.txt'
+          amiList = amiListStr.split(',')
+          for (unityFullVersion in amiList) {
+            versions = unityFullVersion.split('f')
+            unityVersion = versions[0].trim()
+            unityHotfixVersion = versions[1].trim()
+            withEnv(["UNITY_VERSION=${unityVersion}", "UNITY_HOTFIX_VERSION=${unityHotfixVersion}"]) {
+              sh "envsubst '\${UNITY_VERSION} \${UNITY_HOTFIX_VERSION}' < ${env.CASC_TEMPLATE_ADDITIVE_SRC} >> ${env.CASC_DEST}"
+            }
+          }
+        }
+      }
+    }
+    stage('Reload JCasc') {
+      when {
+        expression {
+          isNeedlyBuild
+        }
+      }
+      steps {
+        script {
+          sh "curl -X POST \"${env.JENKINS_URL}/reload-configuration-as-code/?casc-reload-token=${env.CASC_RELOAD_TOKEN}\""
+        }
+      }
+    }
+  }
+  post {
+    success {
+      script {
+        if (!isInitial) {
+          sh 'rm ami_list.prev.txt'
+        }
+        sh 'cp ami_list.txt ami_list.prev.txt'
+      }
+    }
+    cleanup {
+      sh 'rm ami_list.txt'
+    }
+  }
+}

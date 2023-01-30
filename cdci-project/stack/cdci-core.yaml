@@ -1,0 +1,167 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: cloudformation stack for cdci project on single AZ. (1 VPC, 2 Subnets, 2 Security Groups, and 2 ssh key on ssm)
+
+Parameters:
+# プロジェクト名
+  EnvironmentName:
+    Description: Name of the project
+    Type: String
+
+# このStackが配置されているS3のバケット名
+  S3BucketStack:
+    Description: Name of the S3Bucket where the resources for this CloudFormation stack are located
+    Type: String
+
+# アクセス許可を与えるIPアドレス (マイIP)
+  MyIP:
+    Description: Accessable ip address
+    Type: String
+
+Resources:
+# CDCIに使うインスタンスを配置するVPC
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-vpc'
+
+# インターネットゲートウェイ
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-igw'
+
+# インターネットゲートウェイを紐づける手続き
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+
+# サブネット (Public)
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: 10.0.0.0/20
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-public-subnet'
+
+# サブネット (Private)
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: 10.0.128.0/20
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-private-subnet'
+
+# ルートテーブル (Public)
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-public-route-table'
+
+# パブリック用インターネットアクセスのルート
+  DefaultPublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+# パブリックルートテーブルとサブネットの紐づけ
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet
+
+# ルートテーブル (Private)
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-private-route-table'
+
+# プライベートルートテーブルとサブネットの紐づけ
+  PrivateSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      SubnetId: !Ref PrivateSubnet
+
+# 同一SGにアクセス可能なSG
+  SelfSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "self-group-sg"
+      GroupDescription: "Security group with self Security group"
+      VpcId: !Ref VPC
+
+# SelfSecurityGroupのルール
+  SelfRefSecruityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt SelfSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !GetAtt SelfSecurityGroup.GroupId
+
+# IP制限 (一つのみ)
+  MyIPSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "myip-sg"
+      GroupDescription: "Security group with only accesss on (22), (80) from myip"
+      VpcId: !Ref VPC
+
+# MyIPSecurityGroupのHTTPアクセスルール
+  MyIPSecruityGroupHTTPIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      CidrIp: !Sub ${MyIP}/32
+      GroupId: !GetAtt MyIPSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+
+Outputs:
+  VPC:
+    Description: A reference to the created VPC
+    Value: !Ref VPC
+
+  PublicSubnet:
+    Description: A reference to the public subnet.
+    Value: !Ref PublicSubnet
+
+  PrivateSubnet:
+    Description: A reference to the private subnet.
+    Value: !Ref PrivateSubnet
+
+  SelfSecurityGroup:
+    Description: Security group with self security group allowed rule
+    Value: !Ref SelfSecurityGroup
+
+  MyIPSecurityGroup:
+    Description: Security group with allowed by only myip 
+    Value: !Ref MyIPSecurityGroup

@@ -1,0 +1,56 @@
+jenkins:
+  # ユーザーと権限
+  authorizationStrategy:
+    globalMatrix:
+      permissions:
+      - "USER:Overall/Administer:admin"
+
+  remotingSecurity:
+    enabled: true
+
+  scmCheckoutRetryCount: 0
+
+  # ユーザー情報
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+      - id: "admin"
+        password: "${readFile:/secret/admin_initial_password}"
+
+  # マスターノードの同時実行可能ジョブ数
+  numExecutors: 5
+
+  # マスターノードのラベル
+  labelString: "aws github"
+
+unclassified:
+  location:
+    url: "${JENKINS_URL}"
+
+credentials:
+  system:
+    domainCredentials:
+    - credentials:
+      - basicSSHUserPrivateKey:
+          id: "${AGENT_KEYPAIR}"
+          privateKeySource:
+            directEntry:
+              privateKey: "${readFile:/home/jenkins/.ssh/agent-rsa.pem}"
+          scope: GLOBAL
+          username: "jenkins-agent"
+      - basicSSHUserPrivateKey:
+          id: "github"
+          privateKeySource:
+            directEntry:
+              privateKey: "${readFile:/home/jenkins/.ssh/github.pem}"
+
+security:
+  # gitのホストキー登録を初回受け入れ
+  gitHostKeyVerificationConfiguration:
+    sshHostKeyVerificationStrategy: "acceptFirstConnectionStrategy"
+  # すべてのジョブは実行時のユーザーの権限を使用する。(seedジョブに用いる)
+  queueItemAuthenticator:
+    authenticators:
+    - global:
+        strategy: "triggeringUsersAuthorizationStrategy"
