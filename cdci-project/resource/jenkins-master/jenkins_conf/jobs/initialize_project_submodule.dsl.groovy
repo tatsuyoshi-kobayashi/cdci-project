@@ -18,8 +18,6 @@ pipelineJob('/initialize_project_submodule') {
     PROJECT_SEED_JOB: '/jenkins/project_submodule_seed',
     COPY_PROJECT_TEMPLATE_JOB: '/aws/copy_project_template',
     CREATE_UNITY_PROJECT_JOB: '/unity/create_unity_project',
-    GIT_USER_NAME: 'jenkins',
-    GIT_USER_EMAIL: JENKINS_URL,
     SCM_SCRIPT_PATH: 'builder/jenkins/Jenkinsfile'
   )
   definition {
