@@ -1,7 +1,7 @@
-String templatePath = '/var/jenkins_conf/template/project_job.dsl.groovy.template'
+String templatePath = '/var/jenkins_conf/template/project_submodule_job.dsl.groovy.template'
 String desc = "${templatePath}からプロジェクトのビルドジョブを生成します。"
 
-pipelineJob('/jenkins/project_seed') {
+pipelineJob('/jenkins/project_submodule_seed') {
   description(desc)
   authorization { permission('hudson.model.Item.Workspace:authenticated') }
   parameters {
@@ -18,7 +18,7 @@ pipelineJob('/jenkins/project_seed') {
   )
   definition {
     cps {
-      String src = new File("${JOBS_ROOT}/jenkins/project_seed.jenkinsfile").getText('UTF-8')
+      String src = new File("${JOBS_ROOT}/jenkins/project_submodule_seed.jenkinsfile").getText('UTF-8')
       script(src)
       sandbox()
     }

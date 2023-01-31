@@ -18,7 +18,12 @@ pipeline {
                 script {
                   sshagent(['github']) {
                     dir ("tmpdir") {
-                      sh "git clone ${params.GITHUB_REPOSITORY} ."
+                      sh "git clone ${params.GITHUB_PROJECT_REPOSITORY} ."
+                      resultStr = sh returnStdout: true, script: "git branch -a"
+                      assert resultStr.trim() == ""
+                      sh "rm -rf .git"
+
+                      sh "git clone ${params.GITHUB_BUILDER_REPOSITORY} ."
                       resultStr = sh returnStdout: true, script: "git branch -a"
                       assert resultStr.trim() == ""
                       deleteDir()
@@ -49,7 +54,7 @@ pipeline {
         stage('Create unity project') {
           steps {
             script {
-              dir('repo') {
+              dir('project-repo') {
                 build job: env.CREATE_UNITY_PROJECT_JOB,
                 parameters: [
                   string(name: 'UNITY_VERSION', value: params.UNITY_VERSION),
@@ -62,21 +67,41 @@ pipeline {
             }
           }
         }
-        stage('Add template') {
+        stage('Git project repo init') {
+          steps {
+            script {
+              sshagent(['github']) {
+                dir('project-repo') {
+                  sh 'git init'
+                  sh "git config user.name \"${env.GIT_USER_NAME}\""
+                  sh "git config user.email \"${env.GIT_USER_EMAIL}\""
+                  sh "git submodule add -b master ${params.GITHUB_BUILDER_REPOSITORY} builder"
+                  sh 'git add .'
+                  sh 'git commit -m "project initialize"'
+                  sh 'git branch -M master'
+                  sh 'git branch develop'
+                  sh "git remote add origin ${params.GITHUB_PROJECT_REPOSITORY}"
+                  sh 'GIT_SSH_COMMAND=\'ssh -oStrictHostKeyChecking=no\' git push --all'
+                }
+              }
+            }
+          }
+        }
+        stage('Create builder project') {
           steps {
             script {
               build job: env.COPY_PROJECT_TEMPLATE_JOB
               copyArtifacts fingerprintArtifacts: true, projectName: env.COPY_PROJECT_TEMPLATE_JOB, selector: lastSuccessful()
               sh 'rm -rf project-template/unity-project/'
-              sh 'cp -rT project-template repo'
+              sh 'cp -rT project-template builder-repo'
             }
           }
         }
-        stage('Git init') {
+        stage('Git builder repo init') {
           steps {
             script {
               sshagent(['github']) {
-                dir('repo') {
+                dir('builder-repo') {
                   sh 'git init'
                   sh "git config user.name \"${env.GIT_USER_NAME}\""
                   sh "git config user.email \"${env.GIT_USER_EMAIL}\""
@@ -84,7 +109,7 @@ pipeline {
                   sh 'git commit -m "project initialize"'
                   sh 'git branch -M master'
                   sh 'git branch develop'
-                  sh "git remote add origin ${params.GITHUB_REPOSITORY}"
+                  sh "git remote add origin ${params.GITHUB_BUILDER_REPOSITORY}"
                   sh 'GIT_SSH_COMMAND=\'ssh -oStrictHostKeyChecking=no\' git push --all'
                 }
               }

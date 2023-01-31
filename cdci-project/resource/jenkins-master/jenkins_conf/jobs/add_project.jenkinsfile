@@ -18,7 +18,7 @@ pipeline {
                 script {
                   sshagent(['github']) {
                     dir ("tmpdir") {
-                      sh "git clone ${params.GITHUB_REPOSITORY} ."
+                      sh "git clone ${params.GITHUB_BUILDER_REPOSITORY} ."
                       resultStr = sh returnStdout: true, script: "git branch -a"
                       assert resultStr.trim() == ""
                       deleteDir()
@@ -43,25 +43,9 @@ pipeline {
         }
       }
     }
-    stage('Create project') {
+    stage('Setup project') {
       agent { label 'github' }
       stages {
-        stage('Create unity project') {
-          steps {
-            script {
-              dir('repo') {
-                build job: env.CREATE_UNITY_PROJECT_JOB,
-                parameters: [
-                  string(name: 'UNITY_VERSION', value: params.UNITY_VERSION),
-                  string(name: 'UNITY_HOTFIX_VERSION', value: params.UNITY_HOTFIX_VERSION),
-                  string(name: 'UNITY_PROJECT_NAME', value: params.UNITY_PROJECT_NAME),
-                  booleanParam(name: 'EMPTY_PROJECT', value: false)
-                ]
-                copyArtifacts fingerprintArtifacts: true, projectName: env.CREATE_UNITY_PROJECT_JOB, selector: lastSuccessful()
-              }
-            }
-          }
-        }
         stage('Add template') {
           steps {
             script {
@@ -72,20 +56,17 @@ pipeline {
             }
           }
         }
-        stage('Git init') {
+        stage('Git project repo setup') {
           steps {
             script {
               sshagent(['github']) {
                 dir('repo') {
-                  sh 'git init'
+                  sh "git clone -b ${params.PROJECT_REPOSITORY_BRANCH} ${params.GITHUB_PROJECT_REPOSITORY}"
                   sh "git config user.name \"${env.GIT_USER_NAME}\""
                   sh "git config user.email \"${env.GIT_USER_EMAIL}\""
                   sh 'git add .'
-                  sh 'git commit -m "project initialize"'
-                  sh 'git branch -M master'
-                  sh 'git branch develop'
-                  sh "git remote add origin ${params.GITHUB_REPOSITORY}"
-                  sh 'GIT_SSH_COMMAND=\'ssh -oStrictHostKeyChecking=no\' git push --all'
+                  sh 'git commit -m "builder template add"'
+                  sh 'GIT_SSH_COMMAND=\'ssh -oStrictHostKeyChecking=no\' git push origin'
                 }
               }
             }
