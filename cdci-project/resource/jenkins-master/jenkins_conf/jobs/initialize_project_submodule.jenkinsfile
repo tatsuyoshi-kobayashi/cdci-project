@@ -33,6 +33,11 @@ pipeline {
               }
             }
           }
+          post {
+            cleanup {
+              cleanWs()
+            }
+          }
         }
         stage('Setup agent') {
           agent { label 'built-in' }
@@ -104,7 +109,7 @@ pipeline {
                   sh 'git init'
                   sh "git config user.name \"${env.GIT_USER_NAME}\""
                   sh "git config user.email \"${env.GIT_USER_EMAIL}\""
-                  sh "git submodule add -b master ${params.GITHUB_BUILDER_REPOSITORY} builder"
+                  sh "GIT_SSH_COMMAND='ssh -oStrictHostKeyChecking=no' git submodule add -b master ${params.GITHUB_BUILDER_REPOSITORY} builder"
                   sh 'git add .'
                   sh 'git commit -m "project initialize"'
                   sh 'git branch -M master'

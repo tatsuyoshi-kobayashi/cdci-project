@@ -28,6 +28,11 @@ pipeline {
               }
             }
           }
+          post {
+            cleanup {
+              cleanWs()
+            }
+          }
         }
         stage('Setup agent') {
           agent { label 'built-in' }

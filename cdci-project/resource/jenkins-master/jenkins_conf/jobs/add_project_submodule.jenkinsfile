@@ -28,6 +28,11 @@ pipeline {
               }
             }
           }
+          post {
+            cleanup {
+              cleanWs()
+            }
+          }
         }
         stage('Setup agent') {
           agent { label 'built-in' }
@@ -83,7 +88,7 @@ pipeline {
                   sh "GIT_SSH_COMMAND='ssh -oStrictHostKeyChecking=no' git clone -b ${params.PROJECT_REPOSITORY_BRANCH} ${params.GITHUB_PROJECT_REPOSITORY} ."
                   sh "git config user.name \"${env.GIT_USER_NAME}\""
                   sh "git config user.email \"${env.GIT_USER_EMAIL}\""
-                  sh "git submodule add -b master ${params.GITHUB_BUILDER_REPOSITORY} builder"
+                  sh "GIT_SSH_COMMAND='ssh -oStrictHostKeyChecking=no' git submodule add -b master ${params.GITHUB_BUILDER_REPOSITORY} builder"
                   sh 'git add .'
                   sh 'git commit -m "builder project submodule add"'
                   sh 'GIT_SSH_COMMAND=\'ssh -oStrictHostKeyChecking=no\' git push origin'
