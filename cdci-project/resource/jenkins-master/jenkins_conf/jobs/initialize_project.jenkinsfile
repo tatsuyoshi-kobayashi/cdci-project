@@ -78,6 +78,8 @@ pipeline {
               sshagent(['github']) {
                 dir('repo') {
                   sh 'git init'
+                  sh "git config user.name \"${env.GIT_USER_NAME}\""
+                  sh "git config user.email \"${env.GIT_USER_EMAIL}\""
                   sh 'git add .'
                   sh 'git commit -m "project initialize"'
                   sh 'git branch -M master'

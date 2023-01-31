@@ -18,7 +18,9 @@ pipelineJob('/add_project_submodule') {
     SETUP_UNITY_AGENT_JOB: '/jenkins/setup_unity_agent',
     PROJECT_SEED_JOB: '/jenkins/project_submodule_seed',
     COPY_PROJECT_TEMPLATE_JOB: '/aws/copy_project_template',
-    SCM_SCRIPT_PATH: 'builder/jenkins/Jenkinsfile'
+    GIT_USER_NAME: 'jenkins',
+    GIT_USER_EMAIL: JENKINS_URL,
+    SCM_SCRIPT_PATH: 'builder/jenkins/Jenkinsfile',
   )
   definition {
     cps {

@@ -47,6 +47,7 @@ jobs:
   - file: /var/jenkins_conf/jobs/aws/run_agent_builder.dsl.groovy
   - file: /var/jenkins_conf/jobs/jenkins/configure_unity_agent.dsl.groovy
   - file: /var/jenkins_conf/jobs/jenkins/project_seed.dsl.groovy
+  - file: /var/jenkins_conf/jobs/jenkins/project_submodule_seed.dsl.groovy
   - file: /var/jenkins_conf/jobs/jenkins/setup_unity_agent.dsl.groovy
   - file: /var/jenkins_conf/jobs/github/certification_check.dsl.groovy
   - file: /var/jenkins_conf/jobs/unity/get_ulf_license.dsl.groovy

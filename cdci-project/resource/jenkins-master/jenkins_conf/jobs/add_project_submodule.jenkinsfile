@@ -51,7 +51,9 @@ pipeline {
             script {
               sshagent(['github']) {
                 dir('project-repo') {
-                  sh "GIT_SSH_COMMAND='ssh -oStrictHostKeyChecking=no' git clone -b ${params.PROJECT_REPOSITORY_BRANCH} ${params.GITHUB_PROJECT_REPOSITORY}"
+                  sh "GIT_SSH_COMMAND='ssh -oStrictHostKeyChecking=no' git clone -b ${params.PROJECT_REPOSITORY_BRANCH} ${params.GITHUB_PROJECT_REPOSITORY} ."
+                  sh "git config user.name \"${env.GIT_USER_NAME}\""
+                  sh "git config user.email \"${env.GIT_USER_EMAIL}\""
                   sh "git submodule add -b master ${params.GITHUB_BUILDER_REPOSITORY} builder"
                   sh 'git add .'
                   sh 'git commit -m "builder project submodule add"'
@@ -77,6 +79,8 @@ pipeline {
               sshagent(['github']) {
                 dir('builder-repo') {
                   sh 'git init'
+                  sh "git config user.name \"${env.GIT_USER_NAME}\""
+                  sh "git config user.email \"${env.GIT_USER_EMAIL}\""
                   sh 'git add .'
                   sh 'git commit -m "project initialize"'
                   sh 'git branch -M master'

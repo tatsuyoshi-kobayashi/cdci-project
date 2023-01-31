@@ -32,6 +32,17 @@ pipeline {
     stage('Setup project') {
       agent { label 'github' }
       stages {
+        stage('Git project clone') {
+          steps {
+            script {
+              sshagent(['github']) {
+                dir('repo') {
+                  sh "GIT_SSH_COMMAND='ssh -oStrictHostKeyChecking=no' git clone -b ${params.PROJECT_REPOSITORY_BRANCH} ${params.GITHUB_PROJECT_REPOSITORY} ."
+                }
+              }
+            }
+          }
+        }
         stage('Add template') {
           steps {
             script {
@@ -47,7 +58,8 @@ pipeline {
             script {
               sshagent(['github']) {
                 dir('repo') {
-                  sh "GIT_SSH_COMMAND='ssh -oStrictHostKeyChecking=no' git clone -b ${params.PROJECT_REPOSITORY_BRANCH} ${params.GITHUB_PROJECT_REPOSITORY}"
+                  sh "git config user.name \"${env.GIT_USER_NAME}\""
+                  sh "git config user.email \"${env.GIT_USER_EMAIL}\""
                   sh 'git add .'
                   sh 'git commit -m "builder template add"'
                   sh 'GIT_SSH_COMMAND=\'ssh -oStrictHostKeyChecking=no\' git push origin'
