@@ -5,7 +5,7 @@ String desc = '''プロジェクトをセットアップします。
 pipelineJob('/initialize_project') {
   description(desc)
   parameters {
-    stringParam('GITHUB_REPOSITORY')
+    stringParam('GITHUB_PROJECT_REPOSITORY')
     stringParam('PROJECT_NAME')
     stringParam('UNITY_PROJECT_NAME')
     stringParam('UNITY_VERSION')

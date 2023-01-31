@@ -21,6 +21,6 @@ pipelineJob("/projects/${PROJECT_NAME}/build_${UNITY_PROJECT_NAME}") {
       }
       scriptPath("${SCM_SCRIPT_PATH}")
       lightweight()
-    } 
+    }
   }
 }

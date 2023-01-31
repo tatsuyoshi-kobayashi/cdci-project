@@ -1,4 +1,5 @@
-String desc = 'プロジェクトのビルドジョブを生成します。'
+String templatePath = '/var/jenkins_conf/template/project_job.dsl.groovy.template'
+String desc = "${templatePath}からプロジェクトのビルドジョブを生成します。"
 
 pipelineJob('/jenkins/project_seed') {
   description(desc)
@@ -9,9 +10,10 @@ pipelineJob('/jenkins/project_seed') {
     stringParam('UNITY_PROJECT_NAME')
     stringParam('UNITY_VERSION')
     stringParam('UNITY_HOTFIX_VERSION')
+    stringParam('SCM_SCRIPT_PATH')
   }
   environmentVariables(
-    PROJECT_JOB_DSL_TEMPLATE: '/var/jenkins_conf/template/project_job.dsl.groovy.template',
+    PROJECT_JOB_DSL_TEMPLATE: templatePath,
     S3BUCKET_DEPLOY: S3BUCKET_DEPLOY,
   )
   definition {
