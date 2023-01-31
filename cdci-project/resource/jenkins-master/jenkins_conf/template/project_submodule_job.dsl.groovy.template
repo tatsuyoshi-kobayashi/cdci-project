@@ -1,0 +1,35 @@
+folder("/projects/${PROJECT_NAME}") {}
+pipelineJob("/projects/${PROJECT_NAME}/build_${UNITY_PROJECT_NAME}") {
+  environmentVariables(
+    UNITY_VERSION: "${UNITY_VERSION}",
+    UNITY_HOTFIX_VERSION: "${UNITY_HOTFIX_VERSION}",
+    PROJECT_NAME: "${PROJECT_NAME}",
+    UNITY_PROJECT_NAME: "${UNITY_PROJECT_NAME}",
+    S3BUCKET_DEPLOY: "${S3BUCKET_DEPLOY}",
+    GET_UNITY_ULF_JOB: '/unity/get_ulf_license',
+  )
+  definition {
+    cpsScm {
+      scm {
+        git {
+          remote { 
+            url("${GITHUB_REPOSITORY}")
+            credentials('github')
+          }
+          branches('develop')
+          extensions {
+            submoduleOptions {
+              parentCredentials()
+              recursive()
+            }
+            cloneOptions {
+              shallow()
+              depth(1)
+            }
+          }
+        }
+      }
+      scriptPath("${SCM_SCRIPT_PATH}")
+    } 
+  }
+}

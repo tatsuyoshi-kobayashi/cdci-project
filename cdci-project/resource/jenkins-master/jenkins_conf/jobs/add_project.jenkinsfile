@@ -1,0 +1,98 @@
+pipeline {
+  agent none
+  stages {
+    stage('Setup configure') {
+      parallel {
+        stage('Check github') {
+          agent { label 'built-in' }
+          stages {
+            stage('Check authorization') {
+              steps {
+                script {
+                  build job: env.GITHUB_CERTIFICATION_CHECK_JOB
+                }
+              }
+            }
+            stage('Check repository is empty') {
+              steps {
+                script {
+                  sshagent(['github']) {
+                    dir ("tmpdir") {
+                      sh "git clone ${params.GITHUB_BUILDER_REPOSITORY} ."
+                      resultStr = sh returnStdout: true, script: "git branch -a"
+                      assert resultStr.trim() == ""
+                      deleteDir()
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        stage('Setup agent') {
+          agent { label 'built-in' }
+          steps {
+            script {
+              build job: env.SETUP_UNITY_AGENT_JOB,
+              parameters: [
+                string(name: 'UNITY_VERSION', value: params.UNITY_VERSION),
+                string(name: 'UNITY_HOTFIX_VERSION', value: params.UNITY_HOTFIX_VERSION)
+              ]
+            }
+          }
+        }
+      }
+    }
+    stage('Setup project') {
+      agent { label 'github' }
+      stages {
+        stage('Add template') {
+          steps {
+            script {
+              build job: env.COPY_PROJECT_TEMPLATE_JOB
+              copyArtifacts fingerprintArtifacts: true, projectName: env.COPY_PROJECT_TEMPLATE_JOB, selector: lastSuccessful()
+              sh 'rm -rf project-template/unity-project/'
+              sh 'cp -rT project-template repo'
+            }
+          }
+        }
+        stage('Git project repo setup') {
+          steps {
+            script {
+              sshagent(['github']) {
+                dir('repo') {
+                  sh "git clone -b ${params.PROJECT_REPOSITORY_BRANCH} ${params.GITHUB_PROJECT_REPOSITORY}"
+                  sh "git config user.name \"${env.GIT_USER_NAME}\""
+                  sh "git config user.email \"${env.GIT_USER_EMAIL}\""
+                  sh 'git add .'
+                  sh 'git commit -m "builder template add"'
+                  sh 'GIT_SSH_COMMAND=\'ssh -oStrictHostKeyChecking=no\' git push origin'
+                }
+              }
+            }
+          }
+        }
+        stage('Create job') {
+          steps {
+            script {
+              build job: env.PROJECT_SEED_JOB,
+              parameters: [
+                string(name: 'GITHUB_REPOSITORY', value: params.GITHUB_PROJECT_REPOSITORY),
+                string(name: 'PROJECT_NAME', value: params.PROJECT_NAME),
+                string(name: 'UNITY_PROJECT_NAME', value: params.UNITY_PROJECT_NAME),
+                string(name: 'UNITY_VERSION', value: params.UNITY_VERSION),
+                string(name: 'UNITY_HOTFIX_VERSION', value: params.UNITY_HOTFIX_VERSION),
+                string(name: 'SCM_SCRIPT_PATH', value: env.SCM_SCRIPT_PATH),
+              ]
+            }
+          }
+        }
+      }
+      post {
+        cleanup {
+          cleanWs()
+        }
+      }
+    }
+  }
+}
