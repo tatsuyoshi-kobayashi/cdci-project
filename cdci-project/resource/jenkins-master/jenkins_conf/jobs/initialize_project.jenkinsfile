@@ -96,12 +96,12 @@ pipeline {
             script {
               build job: env.PROJECT_SEED_JOB,
               parameters: [
-                string(name: 'GITHUB_REPOSITORY', value: params.GITHUB_REPOSITORY),
+                string(name: 'GITHUB_REPOSITORY', value: params.GITHUB_PROJECT_REPOSITORY),
                 string(name: 'PROJECT_NAME', value: params.PROJECT_NAME),
                 string(name: 'UNITY_PROJECT_NAME', value: params.UNITY_PROJECT_NAME),
                 string(name: 'UNITY_VERSION', value: params.UNITY_VERSION),
                 string(name: 'UNITY_HOTFIX_VERSION', value: params.UNITY_HOTFIX_VERSION),
-                string(name: 'SCM_SCRIPT_PATH', value: env.SCM_SCRIPT_PATH)
+                string(name: 'SCM_SCRIPT_PATH', value: env.SCM_SCRIPT_PATH),
               ]
             }
           }
