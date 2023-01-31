@@ -46,23 +46,6 @@ pipeline {
     stage('Setup project') {
       agent { label 'github' }
       stages {
-        stage('Git project repo setup') {
-          steps {
-            script {
-              sshagent(['github']) {
-                dir('project-repo') {
-                  sh "GIT_SSH_COMMAND='ssh -oStrictHostKeyChecking=no' git clone -b ${params.PROJECT_REPOSITORY_BRANCH} ${params.GITHUB_PROJECT_REPOSITORY} ."
-                  sh "git config user.name \"${env.GIT_USER_NAME}\""
-                  sh "git config user.email \"${env.GIT_USER_EMAIL}\""
-                  sh "git submodule add -b master ${params.GITHUB_BUILDER_REPOSITORY} builder"
-                  sh 'git add .'
-                  sh 'git commit -m "builder project submodule add"'
-                  sh 'GIT_SSH_COMMAND=\'ssh -oStrictHostKeyChecking=no\' git push origin'
-                }
-              }
-            }
-          }
-        }
         stage('Create builder project') {
           steps {
             script {
@@ -87,6 +70,23 @@ pipeline {
                   sh 'git branch develop'
                   sh "git remote add origin ${params.GITHUB_BUILDER_REPOSITORY}"
                   sh 'GIT_SSH_COMMAND=\'ssh -oStrictHostKeyChecking=no\' git push --all'
+                }
+              }
+            }
+          }
+        }
+        stage('Git project repo setup') {
+          steps {
+            script {
+              sshagent(['github']) {
+                dir('project-repo') {
+                  sh "GIT_SSH_COMMAND='ssh -oStrictHostKeyChecking=no' git clone -b ${params.PROJECT_REPOSITORY_BRANCH} ${params.GITHUB_PROJECT_REPOSITORY} ."
+                  sh "git config user.name \"${env.GIT_USER_NAME}\""
+                  sh "git config user.email \"${env.GIT_USER_EMAIL}\""
+                  sh "git submodule add -b master ${params.GITHUB_BUILDER_REPOSITORY} builder"
+                  sh 'git add .'
+                  sh 'git commit -m "builder project submodule add"'
+                  sh 'GIT_SSH_COMMAND=\'ssh -oStrictHostKeyChecking=no\' git push origin'
                 }
               }
             }

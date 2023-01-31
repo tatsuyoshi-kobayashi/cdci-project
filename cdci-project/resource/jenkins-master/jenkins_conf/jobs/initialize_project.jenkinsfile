@@ -18,7 +18,7 @@ pipeline {
                 script {
                   sshagent(['github']) {
                     dir ("tmpdir") {
-                      sh "GIT_SSH_COMMAND='ssh -oStrictHostKeyChecking=no' git clone ${params.GITHUB_REPOSITORY} ."
+                      sh "GIT_SSH_COMMAND='ssh -oStrictHostKeyChecking=no' git clone ${params.GITHUB_PROJECT_REPOSITORY} ."
                       resultStr = sh returnStdout: true, script: "git branch -a"
                       assert resultStr.trim() == ""
                       deleteDir()
@@ -84,7 +84,7 @@ pipeline {
                   sh 'git commit -m "project initialize"'
                   sh 'git branch -M master'
                   sh 'git branch develop'
-                  sh "git remote add origin ${params.GITHUB_REPOSITORY}"
+                  sh "git remote add origin ${params.GITHUB_PROJECT_REPOSITORY}"
                   sh 'GIT_SSH_COMMAND=\'ssh -oStrictHostKeyChecking=no\' git push --all'
                 }
               }
