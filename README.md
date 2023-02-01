@@ -53,16 +53,25 @@ CloudFormation上で新しくスタックを作成します。
 CloudFormationで実行したスタックのOutputsから、jenkinsのリンクを開いて _`admin`_ でログインしてください。  
 (MyIPで指定したIPからのみページを閲覧することができます。)
 
-ダッシュボードの`initialize_project`ジョブを実行することでプロジェクトのCDCI環境をセットアップできます。
+ダッシュボードのルートにいくつか存在するジョブの一つを実行することでプロジェクトのCDCI環境をセットアップできます。
 
-initialize_projectは初回実行時に各種セットアップが入るのでデフォルトのインスタンスタイプでは1時間程度かかります。  
+- `initialize_project`
+- `initialize_project_submodule`
+- `add_project`
+- `add_project_submodule`
+
+これらのジョブは初回実行時に各種セットアップが入るのでデフォルトのインスタンスタイプでは1時間程度かかります。  
 下流ジョブの中にはinputで入力待ちをするステップを含むジョブがあるので、時折確認してセットアップを進めてください。
 
 2回目以降で、同じUnityのバージョンを指定している場合はセットアップが発生しないため、10分程度で完了します。
 
-`initialize_project`ビルドパラメータ
-- `GITHUB_REPOSITORY`
-  - プロジェクトを管理するGitHubのリポジトリのSSHパスを指定します。**空のリポジトリを指定してください。(新規作成時にReadme.mdや.gitignoreを含めないようにしてください。)**
+シードジョブに使用されうるビルドパラメータ
+- `GITHUB_PROJECT_REPOSITORY`
+  - プロジェクトを管理するGitHubのリポジトリのSSHパスを指定します。`initialize_project, initialize_project_submodule`では**空のリポジトリを指定してください。(新規作成時にReadme.mdや.gitignoreを含めないようにしてください。)**
+- `GITHUB_BUILDER_REPOSITORY`
+  - プロジェクトビルド用のjenkinsfileを管理するリポジトリのSSHパスを指定します。**空のリポジトリを指定してください。(新規作成時にReadme.mdや.gitignoreを含めないようにしてください。)**
+- `PROJECT_REPOSITORY_BRANCH`
+  - `GITHUB_PROJECT_REPOSITORY`に加える、構成用ファイルや、SubModulesをコミットするブランチを指定します。
 - `PROJECT_NAME`
   - プロジェクトの名前を指定します。ジョブのフォルダ名に使用されます。
 - `UNITY_PROJECT_NAME`
@@ -104,5 +113,5 @@ initialize_projectは初回実行時に各種セットアップが入るので�
   - UnityイメージのAMIビルドをした際に発生したログが格納されています。削除する場合は、中身を空にして削除してください。
 - [S3::Bucket]`環境名`-cdci-master-deploy-bucket	
   - jenkinsのジョブで作成されたUnityプロジェクトのWebGLビルド成果物です。削除する場合は、中身を空にして削除してください。
-- [EC2::AMI]`環境名`-`Unityのバージョン`-webgl
+- [EC2::AMI]`環境名`-`Unityバージョン`-webgl
   - jenkinsのUnityWebGLビルドエージェント用AMIです。削除する場合、関連するスナップショットも忘れず削除してください。

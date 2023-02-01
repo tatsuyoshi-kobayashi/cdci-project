@@ -39,11 +39,15 @@ jobs:
       }
   # ジョブの追加
   - file: /var/jenkins_conf/jobs/initialize_project.dsl.groovy
+  - file: /var/jenkins_conf/jobs/initialize_project_submodule.dsl.groovy
+  - file: /var/jenkins_conf/jobs/add_project.dsl.groovy
+  - file: /var/jenkins_conf/jobs/add_project_submodule.dsl.groovy
   - file: /var/jenkins_conf/jobs/aws/copy_project_template.dsl.groovy
   - file: /var/jenkins_conf/jobs/aws/ls_unity_agents.dsl.groovy
   - file: /var/jenkins_conf/jobs/aws/run_agent_builder.dsl.groovy
   - file: /var/jenkins_conf/jobs/jenkins/configure_unity_agent.dsl.groovy
   - file: /var/jenkins_conf/jobs/jenkins/project_seed.dsl.groovy
+  - file: /var/jenkins_conf/jobs/jenkins/project_submodule_seed.dsl.groovy
   - file: /var/jenkins_conf/jobs/jenkins/setup_unity_agent.dsl.groovy
   - file: /var/jenkins_conf/jobs/github/certification_check.dsl.groovy
   - file: /var/jenkins_conf/jobs/unity/get_ulf_license.dsl.groovy
