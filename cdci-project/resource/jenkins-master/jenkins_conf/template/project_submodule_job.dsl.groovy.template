@@ -17,10 +17,19 @@ pipelineJob("/projects/${PROJECT_NAME}/build_${UNITY_PROJECT_NAME}") {
             credentials('github')
           }
           branches('develop')
+          extensions {
+            submoduleOptions {
+              parentCredentials()
+              recursive()
+            }
+            cloneOptions {
+              shallow()
+              depth(1)
+            }
+          }
         }
       }
       scriptPath("${SCM_SCRIPT_PATH}")
-      lightweight()
-    }
+    } 
   }
 }

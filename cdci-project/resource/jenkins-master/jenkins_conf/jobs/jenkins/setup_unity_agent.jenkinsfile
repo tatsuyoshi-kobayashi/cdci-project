@@ -9,7 +9,7 @@ https://hub.docker.com/r/unityci/editor/tags?page=1&name=webgl'''
 pipeline {
   agent { label 'built-in' }
   stages {
-		stage('Check unity agent') {
+    stage('Check unity agent') {
       steps {
         script {
           try {
@@ -37,9 +37,9 @@ pipeline {
             build job: env.LS_UNITY_AGENT_JOB
             copyArtifacts fingerprintArtifacts: true, projectName: env.LS_UNITY_AGENT_JOB, selector: lastSuccessful()
             amiListStr = readFile 'ami_list.txt'
-            amiList = amiListStr.split(',')
+            amiList = amiListStr.trim().split(',')
             hasImage = Arrays.asList(amiList).contains(unityFullVersion)
-		
+    
             deleteDir()
           }
         }

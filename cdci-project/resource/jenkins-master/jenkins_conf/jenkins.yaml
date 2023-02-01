@@ -27,6 +27,9 @@ jenkins:
 unclassified:
   location:
     url: "${JENKINS_URL}"
+  scmGit:
+    globalConfigName: "${STACK_ENVIRONMENT_NAME}-jenkins"
+    globalConfigEmail: "${JENKINS_URL}"
 
 credentials:
   system:
