@@ -4,7 +4,7 @@ pipeline {
     stage('Execute jobdsl') {
       steps {
         script {
-          sh """envsubst \\'
+          sh """envsubst '\\
           \${UNITY_VERSION} \\
           \${UNITY_HOTFIX_VERSION} \\
           \${PROJECT_NAME} \\
